@@ -1,4 +1,0 @@
----- UartConfig Æ¥Åä (3 in 3 ÎÄ¼þ) ----
-driver_uart.c (C:\Users\Administrator\Desktop\XMT_BK2461_16PIN_24G_BLE_TX\src):void UartConfig(uint16 baud)
-driver_uart.h (C:\Users\Administrator\Desktop\XMT_BK2461_16PIN_24G_BLE_TX\src):void UartConfig(uint16 baud);
-main.c (C:\Users\Administrator\Desktop\XMT_BK2461_16PIN_24G_BLE_TX\src):    	UartConfig(BAUD);

@@ -1,0 +1,1 @@
+"..\src\demo_saradc.c" BROWSE DEBUG OBJECTEXTEND CODE PRINT(.\demo_saradc.lst) OBJECT(.\demo_saradc.obj)

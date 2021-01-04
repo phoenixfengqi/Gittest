@@ -1,0 +1,1306 @@
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE MAIN
+NO OBJECT MODULE REQUESTED
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE ..\src\main.c LARGE OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\
+                    -lst\main.lst) TABS(2) SRC(.\main.SRC)
+
+line level    source
+
+   1          #include "includes.h"
+   2          
+   3          
+   4          unsigned char Payload_demo[Payload_len];
+   5          bit tx_data_seted=0;
+   6          bit rf_encode_37,rf_encode_38,rf_encode_39;
+   7          uint8 rf_encode_state;
+   8          
+   9          uint8 KeyCode=0;
+  10          uint8 KeyCode1=0;
+  11          
+  12          uint16 KeyCount=0;
+  13          uint8  longCount_scale = 0;
+  14          uint8  SequenceNum_1=0;
+  15          uint8 long_key_value_temp = 0;  //如果长按同一个键，则会保存当前值
+  16          uint8 long_key_value_tempp;
+  17          uint8  SequenceNum_inc_1 = 0;
+  18          uint8 short_long_touch_flag = 0;
+  19          
+  20          uint8 SrcAddr_1[4];
+  21          uint8 CurrentGroup_1[1];
+  22          uint8 Static_scene_state = 0;
+  23          
+  24          #define PWM_OPEN_CLOCK() \
+  25            {CLK_EN_CFG |= 0x10;}   //Enable pwm
+  26          
+  27          #define PWM_SetupIOL(bl) \
+  28              PALT1_SETB(((bl)<<3))
+  29          
+  30          #define PWM1_SetupIOL(b1) \
+  31            PALT1_SETB(((b1)<<4))
+  32          
+  33          #define PWM_Setup(pn,pres,resol,duty) \
+  34            PWM_##pn##_CFG = (((resol>=768)<<7)|(pres));\
+  35            PWM_##pn##_RESOL = ((resol>=768)?(resol-768):(resol));\
+  36            PWM_##pn##_DCLSB = (duty&0xff);\
+  37            PWM_##pn##_DCMSB = ((duty>>8)&0xff)
+  38          
+  39          #define PWM_SET_DUTY(pn,duty) \
+  40            PWM_##pn##_DCLSB = (duty&0xff);\
+  41            PWM_##pn##_DCMSB = ((duty>>8)&0xff)
+  42          
+  43          #define PWM_Open(pn) \
+  44            PWM_##pn##_CFG |= BIT(6)
+  45          
+  46          #define PWM_CLOSE(pn) \
+  47            PWM_##pn##_CFG &= _BIT(6)
+  48          
+  49          
+  50          uint8   AdvPacket_2[32] = 
+  51          {
+  52            //0
+  53              0x02,   // 广播类型
+  54              
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 2   
+
+  55              //27,   // 26 Length ( Device Address + Payload )
+  56              //1
+  57              27,
+  58              /* Device Address(6字节) */
+  59              //0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 
+  60              //2   3    4    5   6     7
+  61              0xfe,0xee,0xc0,0x07,0xda,0x78,                                 //6个字节
+  62              //0x0A,0xFF,0x5D,0x00,0x02,0x01,0x08,0xFF,0x00,0x00,0x00,
+  63              
+  64              // 0x0b,0xFF,0x5D,0x00,0x02,0x01,0x09,0x02,0x01,0x00,0x35,0xf3,   //12个字节
+  65              //8  9     10   11    12     13   14      15   16    17    18   19     20    21   22     23      24   
+             - 25    26    27   28
+  66              //0  1     2    3     4       5    6       7    8     9    10    11    12    13   14     15      16   
+             - 17    18    19     20    //共21字节
+  67              
+  68              19,0x01,  0x04, 0x11,0x07,  0x00, 0x10,  0xff,0x01,  0x02, 0x03, 0x14, 0x00, 0x00,0x00 , 0x01,  0x00, 
+             -0x00, 0xAA//,   0xBB, 0xcc 
+  69          };
+  70          
+  71          #define KEY_PUSH_LONG   (0x80)
+  72          #define KEY_PUSH_UP     (0x40)
+  73          #define KEY_BOND_DOWN   (0x20)
+  74          #define KEY_PUSH_DOWN   (0x00)
+  75          
+  76          #define HAL_KEY_NO_KEY      0x00
+  77          
+  78          #define HAL_KEY_POWER_ON    0x01
+  79          #define HAL_KEY_POWER_OFF   0x02
+  80          #define HAL_KEY_BRIGHT_UP   0x03
+  81          #define HAL_KEY_BRIGHT_DOWN   0x04
+  82          #define HAL_KEY_TEMP_UP     0x05
+  83          #define HAL_KEY_TEMP_DOWN   0x06
+  84          
+  85          #define HAL_KEY_POWER_ON1   0x07
+  86          #define HAL_KEY_POWER_ON2   0x08
+  87          #define HAL_KEY_POWER_ON3   0x09
+  88          #define HAL_KEY_POWER_ON4   0x0a
+  89          #define HAL_KEY_POWER_OFF1    0x0b
+  90          #define HAL_KEY_POWER_OFF2    0x0c
+  91          #define HAL_KEY_POWER_OFF3    0x0d
+  92          #define HAL_KEY_POWER_OFF4    0x0e
+  93          #define HAL_KEY_FACTORY_RESET   0x0f
+  94          #define HAL_KEY_BIND            0x10
+  95          
+  96          #define HAL_TXREAD_EEPROM   0x11
+  97          #define HAL_RXREAD_EEPROM   (KEY_PUSH_UP|HAL_TXREAD_EEPROM)
+  98          
+  99          // for key process 
+ 100          #define POWER_ON1_KEY     (KEY_PUSH_UP|HAL_KEY_POWER_ON1)
+ 101          #define POWER_OFF1_KEY      (KEY_PUSH_UP|HAL_KEY_POWER_OFF1)
+ 102          #define POWER_ON2_KEY     (KEY_PUSH_UP|HAL_KEY_POWER_ON2)
+ 103          #define POWER_OFF2_KEY      (KEY_PUSH_UP|HAL_KEY_POWER_OFF2)
+ 104          #define POWER_ON3_KEY     (KEY_PUSH_UP|HAL_KEY_POWER_ON3)
+ 105          #define POWER_OFF3_KEY      (KEY_PUSH_UP|HAL_KEY_POWER_OFF3)
+ 106          #define POWER_ON4_KEY     (KEY_PUSH_UP|HAL_KEY_POWER_ON4)
+ 107          #define POWER_OFF4_KEY      (KEY_PUSH_UP|HAL_KEY_POWER_OFF4)
+ 108          #define FACTORY_RESET_KEY       (KEY_PUSH_UP|HAL_KEY_FACTORY_RESET)
+ 109          //#define BIND_KEY              (KEY_PUSH_UP|HAL_KEY_BIND)
+ 110          
+ 111          #define POWER_ON_KEY      (KEY_PUSH_UP|HAL_KEY_POWER_ON)
+ 112          #define POWER_OFF_KEY     (KEY_PUSH_UP|HAL_KEY_POWER_OFF)
+ 113          #define BRIGHT_UP_KEY     (KEY_PUSH_UP|HAL_KEY_BRIGHT_UP)
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 3   
+
+ 114          #define BRIGHT_DOWN_KEY       (KEY_PUSH_UP|HAL_KEY_BRIGHT_DOWN)
+ 115          #define TEMP_UP_KEY       (KEY_PUSH_UP|HAL_KEY_TEMP_UP)
+ 116          #define TEMP_DOWN_KEY     (KEY_PUSH_UP|HAL_KEY_TEMP_DOWN)
+ 117          
+ 118          #define DELAY_POWER_OFF_KEY   (KEY_PUSH_LONG|HAL_KEY_POWER_OFF)
+ 119          #define BRIGHT_MOVE_UP_KEY    (KEY_PUSH_LONG|HAL_KEY_BRIGHT_UP)
+ 120          #define BRIGHT_MOVE_DOWN_KEY  (KEY_PUSH_LONG|HAL_KEY_BRIGHT_DOWN)
+ 121          #define TEMP_MOVE_UP_KEY    (KEY_PUSH_LONG|HAL_KEY_TEMP_UP)
+ 122          #define TEMP_MOVE_DOWN_KEY    (KEY_PUSH_LONG|HAL_KEY_TEMP_DOWN)
+ 123          
+ 124          
+ 125          
+ 126          code uint8 Key_TBL[17]={ 
+ 127            HAL_KEY_NO_KEY,   // 0x0 
+ 128            HAL_KEY_POWER_ON, HAL_KEY_POWER_OFF3, HAL_KEY_POWER_ON3,  HAL_KEY_BRIGHT_UP,    // 
+ 129            HAL_KEY_POWER_OFF,  HAL_KEY_POWER_OFF2, HAL_KEY_POWER_ON2,  HAL_KEY_BRIGHT_DOWN,    // 
+ 130            HAL_TXREAD_EEPROM,  HAL_KEY_POWER_OFF1, HAL_KEY_POWER_ON1,  HAL_KEY_TEMP_DOWN,  // 
+ 131            HAL_TXREAD_EEPROM,  HAL_KEY_POWER_OFF4, HAL_KEY_POWER_ON4,  HAL_KEY_TEMP_UP,  //
+ 132          };
+ 133          
+ 134          uint8  XDATA   RF_TxLen_CH3789;  //三个通道要发同一组数据，则其长度也要是一样
+ 135          volatile uint8  XDATA   RF_TxBuf_CH37[RF_TxBuf_CH3789_len];
+ 136          volatile uint8  XDATA   RF_TxBuf_CH38[RF_TxBuf_CH3789_len];
+ 137          volatile uint8  XDATA   RF_TxBuf_CH39[RF_TxBuf_CH3789_len];
+ 138          
+ 139          uint8  XDATA   BLE_PacketBuf[BLE_PacketBuf_len];
+ 140          uint8  XDATA   BLE_PacketLen;
+ 141          uint8  fen_Duan=0,rgb_static_dynamic=0;
+ 142          void Set_MacAddr(void);
+ 143          
+ 144          void Ble_Packet_Encode(void){
+ 145   1        if(tx_data_seted){
+ 146   2          switch(rf_encode_state){
+ 147   3            case 0:
+ 148   3              BlePacketEncode( RF_TxBuf_CH37, AdvPacket_2, 29, 37 );  //虽然这里长度写的是29，不过最终还会产生三个CR
+             -C校验码，因此fifo_data会多三bytes
+ 149   3              rf_encode_state = 1;
+ 150   3              rf_encode_37  = 1;
+ 151   3              break;
+ 152   3            case 1:
+ 153   3              BlePacketEncode( RF_TxBuf_CH38, AdvPacket_2, 29, 38 );
+ 154   3              rf_encode_state = 2;
+ 155   3              rf_encode_38 = 1;
+ 156   3              break;
+ 157   3            case 2:
+ 158   3              BlePacketEncode( RF_TxBuf_CH39, AdvPacket_2, 29, 39 );
+ 159   3              rf_encode_state = 0;
+ 160   3              rf_encode_39 = 1;
+ 161   3              tx_data_seted = 0;
+ 162   3              break;
+ 163   3            }
+ 164   2        }
+ 165   1      }
+ 166          
+ 167          void FuncLED_Init(void)
+ 168          {
+ 169   1      #if __FQ__
+*** WARNING C322 IN LINE 169 OF ..\src\main.c: unknown identifier
+                PWM_OPEN_CLOCK();  //打开pwm功能
+              #if FangZhen_Mode
+                PWM1_SetupIOL(BIT(0));
+              #else
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 4   
+
+                PWM_SetupIOL(BIT(0));
+              #endif
+              #endif
+ 177   1      }
+ 178          
+ 179          void Open_FuncLED(void)
+ 180          {
+ 181   1      #if __FQ__
+*** WARNING C322 IN LINE 181 OF ..\src\main.c: unknown identifier
+              
+              #if FangZhen_Mode   //在仿真模式下，不能使用VPP输出pwm信号
+                PWM_Setup(1, 39, (768+232), (768));
+                PWM_Open(1);
+              #else
+                PWM_Setup(0, 39, (768+232), (768));
+                PWM_Open(0);
+              #endif
+              
+              #endif
+ 192   1      }
+ 193          
+ 194          void Close_FuncLED(void)
+ 195          {
+ 196   1      #if __FQ__
+*** WARNING C322 IN LINE 196 OF ..\src\main.c: unknown identifier
+              
+              #if FangZhen_Mode  //在仿真模式下，不能使用VPP输出pwm信号
+                PWM_CLOSE(1);
+              #else
+                PWM_CLOSE(0);
+              #endif
+              
+              #endif
+ 205   1      }
+ 206          
+ 207          void mcu_io_sleep()
+ 208          {
+ 209   1      #if Package_SOP16
+ 210   1          GPIO_InputSetup(1, 0xff, 0xff,0);
+ 211   1        GPIO_OutputSetup(2, BIT(0)|BIT(1)|BIT(6)|BIT(7), 0);
+ 212   1        GPIO_InputSetup(2,(~(BIT(0)|BIT(1)|BIT(6)|BIT(7))), (~(BIT(0)|BIT(1)|BIT(6)|BIT(7))),0);
+ 213   1        GPIO_DiablePU(2,BIT(0)|BIT(1)|BIT(6)|BIT(7));
+ 214   1        GPIO_DiablePD(2,0xff);
+ 215   1        key_s0 = 0;
+ 216   1        key_s1 = 0; 
+ 217   1        key_s2 = 0;
+ 218   1        key_s3 = 0;
+ 219   1        GPIO_InputSetup(3, 0xff, 0xff,0);
+ 220   1      #else
+                GPIO_InputSetup(1, 0xff, 0xff,0);
+                GPIO_OutputSetup(2, BIT(2)|BIT(3)|BIT(6)|BIT(7), 0);
+                GPIO_InputSetup(2,(~(BIT(2)|BIT(3)|BIT(6)|BIT(7))), (~(BIT(2)|BIT(3)|BIT(6)|BIT(7))),0);
+                GPIO_DiablePU(2,BIT(2)|BIT(3)|BIT(6)|BIT(7));
+                GPIO_DiablePD(2,0xff);
+                key_s0 = 0;
+                key_s1 = 0; 
+                key_s2 = 0;
+                key_s3 = 0;
+                GPIO_InputSetup(3, 0xff, 0xff,0);
+              #endif
+ 232   1        Delay_ms(1);
+ 233   1      }
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 5   
+
+ 234          
+ 235          void gpio_init()
+ 236          {
+ 237   1      #if Package_SOP16
+ 238   1        GPIO_OutputSetup(2, BIT(0)|BIT(1)|BIT(6)|BIT(7), 0);
+ 239   1          GPIO_InputSetup(3, BIT(4)|BIT(5)|BIT(6)|BIT(7), BIT(4)|BIT(5)|BIT(6)|BIT(7),0);
+ 240   1      #endif
+ 241   1      #if Package_QFN24
+                GPIO_OutputSetup(2, BIT(2)|BIT(3)|BIT(6)|BIT(7), 0);
+                GPIO_InputSetup(3, BIT(3)|BIT(2)|BIT(1)|BIT(0), BIT(3)|BIT(2)|BIT(1)|BIT(0),0);
+                GPIO_OutputSetup(1,BIT(1),0);
+                GPIO_DiablePU(1, BIT(1));
+                LED_Test = 0;
+              #endif
+ 248   1      
+ 249   1          key_s0 = 0;
+ 250   1        key_s1 = 0;
+ 251   1        key_s2 = 0;
+ 252   1        key_s3 = 0;
+ 253   1      }
+ 254          
+ 255          void mcu_clk_inital(void)
+ 256          {
+ 257   1        PCON=0;          // 2018/12/11
+ 258   1        PCON2 = 0 ; 
+ 259   1          CLK_EN_CFG = 0x00 ;
+ 260   1          CKCON = 0x00;    // 2018/12/11
+ 261   1      }
+ 262          
+ 263          void Sys_SleepModeCheck(void)
+ 264          {
+ 265   1        if(adv_flag)
+ 266   1          return;
+ 267   1          wIdleTime++;
+ 268   1          if(wIdleTime > cRemoteIDLETime)
+ 269   1          {
+ 270   2              bPowerDN = 1;
+ 271   2              wIdleTime = 0;
+ 272   2          }    
+ 273   1      }
+ 274          
+ 275          void Sys_PowerOn(void)
+ 276          {
+ 277   1        if(power_on)          //MCU 从sleep 或 power_down唤醒
+ 278   1        {
+ 279   2              power_on = 0;
+ 280   2              gpio_init();
+ 281   2          WaitUs(80); 
+ 282   2          PowerUp_Rf();
+ 283   2              FLUSH_TX;
+ 284   2              FLUSH_RX; 
+ 285   2              
+ 286   2              #if UART_ENABLE
+ 287   2            UartConfig(BAUD);
+ 288   2            WaitUs(60000);  
+ 289   2              #endif
+ 290   2              
+ 291   2          WaitUs(200);            //  120us for PLL locking after power up RF part.   
+ 292   2          InitSysTimer(); 
+ 293   2              
+ 294   2          WaitUs(200);  
+ 295   2              FuncLED_Init();
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 6   
+
+ 296   2          wIdleTime = 0;  
+ 297   2        }
+ 298   1      } 
+ 299          
+ 300          void Sys_PowerDown(void)
+ 301          {
+ 302   1          if(bPowerDN)
+ 303   1          { 
+ 304   2              bPowerDN = 0;
+ 305   2      
+ 306   2              Close_Uart();
+ 307   2              Close_FuncLED();
+ 308   2              
+ 309   2          EX5  = 0 ;
+ 310   2          PowerDown_Rf(); 
+ 311   2          
+ 312   2          SysTimerStop(); 
+ 313   2              mcu_io_sleep();
+ 314   2              
+ 315   2              TRX_ANAPWD_CTRL0 |=0x11;
+ 316   2      
+ 317   2      #if FangZhen_Mode
+ 318   2              P3_WUEN = 0x0F;     // P3.0 P3.1 P3.2 P3.3 wakeup enable 
+ 319   2              P3_WUMOD = 0x00;  
+ 320   2      #else
+                      P3_WUEN = 0xF0;     // P3.4 P3.5 P3.6 P3.7 wakeup enable 
+                      P3_WUMOD = 0x00;
+              #endif
+ 324   2      
+ 325   2            TRX_ANAPWD_CTRL0 = 0x53;
+ 326   2            
+ 327   2          WaitUs(200);
+ 328   2          MCU_SLEEP();
+ 329   2              _nop_();
+ 330   2          _nop_();
+ 331   2          _nop_();
+ 332   2          _nop_();
+ 333   2          _nop_();
+ 334   2          _nop_();
+ 335   2          _nop_();
+ 336   2          _nop_();
+ 337   2          _nop_();
+ 338   2          _nop_();
+ 339   2          _nop_();
+ 340   2          _nop_();
+ 341   2            PCON2 = 0x00;
+ 342   2          _nop_();
+ 343   2          _nop_();
+ 344   2          _nop_();
+ 345   2          _nop_();
+ 346   2          _nop_();
+ 347   2          _nop_();
+ 348   2          _nop_();
+ 349   2          _nop_();
+ 350   2          _nop_();
+ 351   2          _nop_();
+ 352   2          _nop_();
+ 353   2          _nop_();
+ 354   2          WaitUs(200);
+ 355   2          power_on = 1;
+ 356   2            
+ 357   2          }
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 7   
+
+ 358   1      }
+ 359          
+ 360          #if FangZhen_Mode
+ 361          #define KSA             0xd1    //P2.7  P2.6  P2.4 P2.0  is 1(high voltag)
+ 362          #define KS0             0x51    //P2.7 = 0
+ 363          #define KS1             0x91    //P2.6 = 0
+ 364          #define KS2             0xc1    //P2.4 = 0
+ 365          #define KS3             0xd0    //P2.0 = 0
+ 366          #define KEYSCANBIT(x)   P2=(x)
+ 367          #define NOKEYPUSH       0x0F    ////P3_1/2/3/4
+ 368          #define KEYREADBIT     (P3&NOKEYPUSH)
+ 369          #define KEYP2READ       P2
+ 370          
+ 371          #else
+              #define KSA             0xc3    //P2.7  P2.6  P2.1 P2.0  is 1(high voltag)
+              #define KS0             0x43    //P2.7 = 0
+              #define KS1       ss      0x83    //P2.6 = 0
+              #define KS2             0xc1    //P2.1 = 0
+              #define KS3             0xc2    //P2.0 = 0
+              #define KEYSCANBIT(x)   P2=(x)
+              #define NOKEYPUSH       0xF0        //P3_4/5/6/7
+              #define KEYREADBIT     (P3&NOKEYPUSH)
+              #define KEYP2READ       P2
+              #endif
+ 382          
+ 383          uint8 KeyP2_scan_func(){    
+ 384   1          int8 key_value = 0;
+ 385   1      #if FangZhen_Mode   //set P2.7  P2.6  P2.4 P2.0 input
+ 386   1          GPIO_InputSetup(2, BIT(0)|BIT(4)|BIT(6)|BIT(7),BIT(0)|BIT(4)|BIT(6)|BIT(7), 0);
+ 387   1          GPIO_OutputSetup(3, BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7), 0);//P3.7  P3.6  P3.4 P3.
+             -5
+ 388   1      #else
+                  //set P2.7  P2.6  P2.1 P2.0 input
+                GPIO_InputSetup(2, BIT(0)|BIT(1)|BIT(6)|BIT(7),BIT(0)|BIT(1)|BIT(6)|BIT(7), 0);
+              #endif
+ 392   1      
+ 393   1          while((KEYP2READ&KSA) != KSA){        
+ 394   2              //logvalue(P2,P2, 0xb2);
+ 395   2              if(key_s0 == 0){key_value = 1; break;}
+ 396   2              if(key_s1 == 0){key_value = 2; break;}
+ 397   2              if(key_s2 == 0){key_value = 3; break;}
+ 398   2              if(key_s3 == 0){key_value = 4; break;}
+ 399   2           }
+ 400   1      
+ 401   1      #if FangZhen_Mode
+ 402   1          GPIO_OutputSetup(2, BIT(0)|BIT(4)|BIT(6)|BIT(7), 0);
+ 403   1      #else
+                  //set P2.7  P2.6  P2.1 P2.0 output
+                GPIO_OutputSetup(2, BIT(0)|BIT(1)|BIT(6)|BIT(7), 0);
+              #endif    
+ 407   1          return key_value;
+ 408   1      }
+ 409          
+ 410          uint8 Key_scan_func(uint8 keyscan){  
+ 411   1      #if FangZhen_Mode
+ 412   1          GPIO_OutputSetup(2, BIT(0)|BIT(4)|BIT(6)|BIT(7), 0);//P2.7  P2.6  P2.4P2.0
+ 413   1          GPIO_InputSetup(3, BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7),
+ 414   1                                BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7), 0);//P3.7  P3.6  P3.4 P
+             -3.5
+ 415   1      #else
+                GPIO_OutputSetup(2, BIT(0)|BIT(1)|BIT(6)|BIT(7), 0);//P2.7  P2.6  P2.1 P2.0
+                GPIO_InputSetup(3, BIT(4)|BIT(5)|BIT(6)|BIT(7),BIT(4)|BIT(5)|BIT(6)|BIT(7), 0);//P3.7  P3.6  P3.4 P3.5
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 8   
+
+                GPIO_InputSetup(3, BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7),
+                                        BIT(0)|BIT(1)|BIT(2)|BIT(3)|BIT(4)|BIT(5)|BIT(6)|BIT(7), 0);//P3.7  P3.6  P3.4 P
+             -3.5
+              #endif
+ 421   1         // if(!key_r0)       {loginfo("37Low\r\n");}   else       {loginfo("37High\r\n");}    return 0;  // for
+             - test
+ 422   1         
+ 423   1          KEYSCANBIT(keyscan); 
+ 424   1          //logvalue(P3,P3, 0xb3); 
+ 425   1          if(KEYREADBIT != NOKEYPUSH){
+ 426   2              if(!key_r3) return 5;
+ 427   2              if(!key_r2) return 6;
+ 428   2              if(!key_r1) return 7;
+ 429   2              if(!key_r0) return 8;        
+ 430   2          }
+ 431   1          return 0;
+ 432   1      }
+ 433          
+ 434          //key value: 1 2 3 4 5 6 ... 24
+ 435          //8 6 5 7   11 10 9  16 15 13
+ 436          uint8 Key24_Detect_GPIO(void){
+ 437   1          int8 key_value = 0;
+ 438   1          if(key_value = KeyP2_scan_func()) { logvalue(0xEA,key_value, 1);      return (key_value);}
+ 439   1          if(key_value = Key_scan_func(KSA)){ logvalue(0xEF,(key_value+16), 1); return (key_value+16);} 
+ 440   1          
+ 441   1          if(key_value = Key_scan_func(KS0)){ logvalue(0xEB,key_value, 1);       return (key_value);}
+ 442   1          if(key_value = Key_scan_func(KS1)){ logvalue(0xEC,(key_value+4), 1);   return (key_value+4);}
+ 443   1          if(key_value = Key_scan_func(KS2)){ logvalue(0xED,(key_value+8), 1);   return (key_value+8);}
+ 444   1          if(key_value = Key_scan_func(KS3)){ logvalue(0xEE,(key_value+12), 1);  return (key_value+12);} 
+ 445   1          
+ 446   1          return key_value;
+ 447   1      }
+ 448          
+ 449          #if 0
+              uint8 Key_Detect_GPIO(void)
+              {
+                uint8 keybuf[2];
+                uint8 i, j, KeyTempCode;
+              
+                keybuf[0] = 0;
+                keybuf[1] = 0;
+              
+                key_s0 = 0;
+                key_s1 = 1;
+                key_s2 = 1;
+                key_s3 = 1;
+              
+                i = 0;
+                if(!key_r0)
+                  keybuf[i] |= 0x01;
+                else if(!key_r1)
+                  keybuf[i] |= 0x02;
+                else if(!key_r2)
+                  keybuf[i] |= 0x04;
+                else if(!key_r3)
+                  keybuf[i] |= 0x08;
+              
+                key_s0 = 1;
+                key_s1 = 0;
+                if(!key_r0)
+                  keybuf[i] |= 0x10;
+                else if(!key_r1)
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 9   
+
+                  keybuf[i] |= 0x20;
+                else if(!key_r2)
+                  keybuf[i] |= 0x40;
+                else if(!key_r3)
+                  keybuf[i] |= 0x80;
+              
+                key_s1 = 1;
+                key_s2 = 0; 
+                i = 1;
+                if(!key_r0)
+                  keybuf[i] |= 0x01;
+                else if(!key_r1)
+                  keybuf[i] |= 0x02;
+                else if(!key_r2)
+                  keybuf[i] |= 0x04;
+                else if(!key_r3)
+                  keybuf[i] |= 0x08;
+              
+                key_s2 = 1;
+                key_s3 = 0;
+                if(!key_r0)
+                  keybuf[i] |= 0x10;
+                else if(!key_r1)
+                  keybuf[i] |= 0x20;
+                else if(!key_r2)
+                  keybuf[i] |= 0x40;
+                else if(!key_r3)
+                  keybuf[i] |= 0x80;
+              
+                key_s0 = 0;
+                key_s1 = 0; 
+                key_s2 = 0;
+                key_s3 = 0;
+              
+                key_r0^=1;
+              
+                KeyTempCode = 1;
+                for(i=0;i<2;i++) 
+                {
+                  for(j=0;j<8;j++)
+                  {
+                    if(keybuf[i]&0x01)
+                    {
+                      return (KeyTempCode);
+                    }
+                    keybuf[i] >>= 1;
+                    KeyTempCode++;
+                  }
+                    
+                }
+                return 0;
+              }
+              #endif
+ 531          
+ 532          #define CRC_CHECK_START 13
+ 533          #define CRC_CHECK_STOP  (CRC_CHECK_START+11)
+ 534          uint8 Calc_CRC_Value(void){
+ 535   1        uint8 i;
+ 536   1        uint8 sum_1;
+ 537   1        sum_1 = AdvPacket_2[CRC_CHECK_START];
+ 538   1        for(i=(CRC_CHECK_START+1);i<CRC_CHECK_STOP;i++){
+ 539   2          sum_1 += AdvPacket_2[i];
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 10  
+
+ 540   2        }
+ 541   1        return sum_1;
+ 542   1      }
+ 543          
+ 544          void Set_Common_com_Data(void){
+ 545   1        Set_MacAddr();
+ 546   1        AdvPacket_2[1] = Adv_Packet_Len;  //数据长度，定长  装载的数据长度  ,19+6+2 = 27
+ 547   1        
+ 548   1        AdvPacket_2[8] = 20;   // payload数据长度
+ 549   1        AdvPacket_2[9] = 0x01;
+ 550   1        AdvPacket_2[10] = 0x04;
+ 551   1        AdvPacket_2[11] = 0x11;
+ 552   1        AdvPacket_2[12] = 0x07;   //
+ 553   1        
+ 554   1        AdvPacket_2[13] = 0x00;    //company set,厂家码
+ 555   1        AdvPacket_2[14] = 0x10;    //遥控器，遥控器用0x10来识别
+ 556   1      }
+ 557          
+ 558          void Set_Common_Tx_Data(void){
+ 559   1        AdvPacket_2[22] = 0;
+ 560   1          
+ 561   1        SequenceNum_1 ++;
+ 562   1      
+ 563   1        AdvPacket_2[23] = SequenceNum_1;
+ 564   1        AdvPacket_2[24] = Calc_CRC_Value();
+ 565   1        AdvPacket_2[25] = 0x00;
+ 566   1        AdvPacket_2[26] = 0xAA;  //幸好在接收模块上只识别到0xAA
+ 567   1      }
+ 568          
+ 569          
+ 570          void ShortKey_PowerOn(void){
+ 571   1          loginfo("Pwon\r\n");
+ 572   1          CurrentGroup_1[0] = Group_ALL;
+ 573   1          AdvPacket_2[15] = Group_ALL;    //组
+ 574   1          AdvPacket_2[19] = BLE_CMD_onoff;    //on/off cmd
+ 575   1          AdvPacket_2[20] = CMD_turn_on;
+ 576   1          
+ 577   1      }
+ 578          void ShortKey_PowerOff(void){
+ 579   1          loginfo("Pwoff\r\n");
+ 580   1          CurrentGroup_1[0] = Group_ALL;
+ 581   1          AdvPacket_2[15] = Group_ALL;    //组
+ 582   1          AdvPacket_2[19] = BLE_CMD_onoff;    //on/off cmd
+ 583   1          AdvPacket_2[20] = CMD_turn_off;
+ 584   1      }
+ 585          void ShortKey_E(void){
+ 586   1          loginfo("K_E\r\n");
+ 587   1      
+ 588   1      }
+ 589          void ShortKey_S_sub(void){
+ 590   1          loginfo("K_S sub\r\n");
+ 591   1      
+ 592   1      }
+ 593          void ShortKey_S_add(void){
+ 594   1          loginfo("K_S add\r\n");
+ 595   1      
+ 596   1      }
+ 597          void ShortKey_White(void){
+ 598   1          loginfo("K_white\r\n");
+ 599   1      }
+ 600          void ShortKey_Red(void){
+ 601   1          loginfo("K_red\r\n");
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 11  
+
+ 602   1      
+ 603   1      }
+ 604          void ShortKey_B_add(void){
+ 605   1          loginfo("K_b add\r\n");
+ 606   1      
+ 607   1      }
+ 608          void ShortKey_Yellow(void){
+ 609   1          loginfo("K_yellow\r\n");
+ 610   1      
+ 611   1      }
+ 612          void ShortKey_Green(void){
+ 613   1          loginfo("K_green\r\n");
+ 614   1      
+ 615   1      }
+ 616          void ShortKey_Scale(void){
+ 617   1          loginfo("K_scale\r\n");
+ 618   1      
+ 619   1      }
+ 620          void ShortKey_Color(void){
+ 621   1          loginfo("K_color\r\n");
+ 622   1      
+ 623   1      }
+ 624          
+ 625          void ShortKey_Blue(void){
+ 626   1          loginfo("K_blue\r\n");
+ 627   1      
+ 628   1      }
+ 629          void ShortKey_B_sub(void){
+ 630   1          loginfo("K_b sub\r\n");
+ 631   1      
+ 632   1      }
+ 633          void ShortKey_M1(void){
+ 634   1          loginfo("K m1\r\n");
+ 635   1      
+ 636   1      }
+ 637          void ShortKey_M2(void){
+ 638   1          loginfo("K m2\r\n");
+ 639   1      
+ 640   1      }
+ 641          void ShortKey_M3(void){
+ 642   1          loginfo("K m3\r\n");
+ 643   1      
+ 644   1      }
+ 645          void ShortKey_M4(void){
+ 646   1          loginfo("K m4\r\n");
+ 647   1      
+ 648   1      }
+ 649          void ShortKey_M5(void){
+ 650   1          loginfo("K m5\r\n");
+ 651   1      
+ 652   1      }
+ 653          void ShortKey_M6(void){
+ 654   1          loginfo("K m6\r\n");
+ 655   1      
+ 656   1      }
+ 657          void ShortKey_M7(void){
+ 658   1          loginfo("K m7\r\n");
+ 659   1      
+ 660   1      }
+ 661          void ShortKey_M8(void){
+ 662   1          loginfo("K m8\r\n");
+ 663   1      
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 12  
+
+ 664   1      }
+ 665          void ShortKey_M9(void){
+ 666   1          loginfo("K m9\r\n");
+ 667   1      
+ 668   1      }
+ 669          
+ 670          uint8 LongKey_Indentify(uint8 keyvalue){
+ 671   1          if(keyvalue == SKEY_POWER_ON){
+ 672   2              return LKEY_POWER_ON;
+ 673   2          }
+ 674   1          if(keyvalue == SKEY_POWER_OFF){
+ 675   2              return LKEY_POWER_OFF;
+ 676   2          }
+ 677   1          if(keyvalue == SKEY_E){
+ 678   2              return LKEY_E;
+ 679   2          }
+ 680   1          if(keyvalue == SKEY_COLOR){
+ 681   2              return LKEY_COLOR;
+ 682   2          }
+ 683   1          return keyvalue;
+ 684   1      }
+ 685          
+ 686          void LongKey_PowerOn(void){
+ 687   1          loginfo("LK pwon\r\n");
+ 688   1      }
+ 689          void LongKey_PowerOff(void){
+ 690   1          loginfo("LK pwoff\r\n");
+ 691   1          CurrentGroup_1[0] = Group_ALL;
+ 692   1          AdvPacket_2[15] = Group_ALL;    //组
+ 693   1          AdvPacket_2[19] = BLE_CMD_onoff;    //on/off cmd
+ 694   1          AdvPacket_2[20] = CMD_turn_off;  
+ 695   1      
+ 696   1      }
+ 697          void LongKey_E(void){
+ 698   1          loginfo("LK e\r\n");
+ 699   1      
+ 700   1      }
+ 701          void LongKey_Color(void){
+ 702   1          loginfo("LK cl\r\n");
+ 703   1      
+ 704   1      }
+ 705          
+ 706          
+ 707          code st_key_handle_map Key24_TBL[]={ 
+ 708              {NO_KEY_PRESS,  NULL,}, // 0x0 
+ 709              //短按键处理
+ 710              
+ 711              {SKEY_M3,        ShortKey_M3,},         // 1
+ 712              {SKEY_YELLOW,    ShortKey_Yellow,},     // 2
+ 713              {SKEY_M8,        ShortKey_M8,},         // 3
+ 714              {SKEY_M1,        ShortKey_M1,},
+ 715              {SKEY_B_SUB,     ShortKey_B_sub,},
+ 716              {SKEY_S_ADD,     ShortKey_S_add,},
+ 717              {SKEY_M6,        ShortKey_M6,},  //7
+ 718          
+ 719              {SKEY_POWER_ON,  ShortKey_PowerOn,},
+ 720              {SKEY_SCALE,     ShortKey_Scale,},
+ 721              {SKEY_RED,       ShortKey_Red,},  // 10
+ 722              {SKEY_M5,        ShortKey_M5,},
+ 723              {SKEY_S1,        NULL,},  // 12
+ 724              {SKEY_GREEN,     ShortKey_Green,},
+ 725              {SKEY_WHITE,     ShortKey_White,},
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 13  
+
+ 726              {SKEY_M7,        ShortKey_M7,},
+ 727              {SKEY_M9,        ShortKey_M9,}, //15
+ 728              {SKEY_COLOR,     ShortKey_Color,},
+ 729              {SKEY_S_SUB,     ShortKey_S_sub,},
+ 730              {SKEY_M2,        ShortKey_M2,},
+ 731              {SKEY_E,         ShortKey_E,},
+ 732              {SKEY_BLUE,      ShortKey_Blue,}, //20
+ 733              {SKEY_B_ADD,     ShortKey_B_add,},
+ 734              {SKEY_M4,        ShortKey_M4,}, //22
+ 735              {SKEY_POWER_OFF, ShortKey_PowerOff,}, //23
+ 736          
+ 737              {LKEY_POWER_ON,  LongKey_PowerOn,},
+ 738              {LKEY_POWER_OFF, LongKey_PowerOff,},    
+ 739              {LKEY_E,         LongKey_E,},
+ 740              {LKEY_COLOR,     LongKey_Color}
+ 741          };
+ 742          
+ 743          
+ 744          //K_green   K_white  K_S add  K_color
+ 745          #define KEYRELEASE  0
+ 746          void Key_Scan(void){
+ 747   1        uint8 inKey;
+ 748   1          
+ 749   1          inKey = Key24_Detect_GPIO();
+ 750   1          if(inKey == KEYRELEASE){//按键释放
+ 751   2              if(KeyCode){
+ 752   3                  if((KeyCount >= 50) && (KeyCount < 1000))  //短按的释放
+ 753   3                  {
+ 754   4                      if(Key24_TBL[KeyCode].index == KeyCode){
+ 755   5                          Key24_TBL[KeyCode].handle();
+ 756   5                      }else{
+ 757   5                          //logvalue(0xAA,KeyCode, Key24_TBL[KeyCode].index); 
+ 758   5                          loginfo("Kerr");
+ 759   5                      }
+ 760   4                  }else if(KeyCount > 1200){//长按按键
+ 761   4                      if(Key24_TBL[KeyCode].index == KeyCode){
+ 762   5                         Key24_TBL[KeyCode].handle();
+ 763   5                      }
+ 764   4                  }
+ 765   3                  
+ 766   3                  adv_flag = 1 ;
+ 767   3                  KeyCode = 0;
+ 768   3              }
+ 769   2          }else{//按键
+ 770   2              if(KeyCode == 0){
+ 771   3                  KeyCount = 0;
+ 772   3              }
+ 773   2              
+ 774   2              if(KeyCount > 1000){
+ 775   3                  KeyCode = LongKey_Indentify(inKey);
+ 776   3              }else{
+ 777   3                  KeyCode = inKey;
+ 778   3              }
+ 779   2      #if 0
+                  if(KeyCount < 10000){ 
+                    KeyCount++; 
+                  }else{
+                    KeyCount = LONG_CNT+1;
+                  }
+              #endif        
+ 786   2          }
+ 787   1      }
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 14  
+
+ 788          
+ 789          #if 0
+              void Key_Scan_old(void)
+              {
+                uint8 inKey;
+                uint8 KeyMode = 0;
+                uint8 newKey;
+                newKey=HAL_KEY_NO_KEY;
+                inKey = Key_Detect_GPIO();  //读取按键值
+                short_long_touch_flag = 0;
+                if(inKey != KeyCode)
+                {
+                  if(KeyCode)
+                  {
+                        Close_FuncLED();
+                    if((KeyCount >= SHORT_CNT) && (KeyCount < LONG_CNT))  //短按的释放
+                    {
+                      KeyMode = KEY_PUSH_UP;  //释放按键
+                      newKey  = Key_TBL[KeyCode];
+                      switch(newKey)
+                      {
+                                  case HAL_KEY_POWER_ON:    // all on/off
+                        case HAL_KEY_POWER_OFF:
+                                      CurrentGroup_1[0] = Group_ALL;
+                                      AdvPacket_2[15] = Group_ALL;    //组
+                          AdvPacket_2[19] = BLE_CMD_onoff;    //on/off cmd
+                                      if(newKey == HAL_KEY_POWER_ON){  //on
+                                          AdvPacket_2[20] = CMD_turn_on;
+                                      }else if(newKey == HAL_KEY_POWER_OFF){
+                                        AdvPacket_2[20] = CMD_turn_off;  
+                                      }
+                          goto exit_0;
+                          break;  
+              
+                                 case HAL_KEY_POWER_OFF1:  //小夜灯 -> 中性光 
+                                  AdvPacket_2[15] = CurrentGroup_1[0];
+                          AdvPacket_2[19] = cmd_setcw_mode; //on/off cmd
+                          AdvPacket_2[20] = 255; //打开
+                          AdvPacket_2[21] = 255; //打开
+                          goto exit_2;
+                        //AdvPacket_2[15] = CurrentGroup_1[0];
+                        //AdvPacket_2[19] = cmd_cw_low_set; //on/off cmd
+                        //AdvPacket_2[20] = 0; //打开
+                                  //goto exit_0;
+                          break;
+                                      
+                        //case HAL_KEY_POWER_ON1:   //在长条形中是小夜灯
+                        case HAL_KEY_POWER_ON2:  // // 开1 //  休闲  -> 定时
+                            AdvPacket_2[15] = CurrentGroup_1[0];
+                            AdvPacket_2[19] = cmd_time_set; //on/off cmd
+                            AdvPacket_2[20] = DingShing_Time; //打开
+                            //AdvPacket_2[21] = 0x0f; //打开
+                          //CurrentGroup_1[0] = Group_One;
+                          //AdvPacket_2[15] = CurrentGroup_1[0];
+                          //AdvPacket_2[19] = BLE_CMD_onoff;  //on/off cmd
+                          //AdvPacket_2[20] = CMD_turn_on; //打开
+                          goto exit_0;
+                          break;
+                        //组2开
+                        //case HAL_KEY_POWER_ON2:
+                         case HAL_KEY_POWER_OFF2:  //   开2   // 阅读  -> 小夜灯
+                            AdvPacket_2[15] = CurrentGroup_1[0];
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 15  
+
+                            AdvPacket_2[19] = cmd_setcw_mode; //on/off cmd
+                            AdvPacket_2[20] = 15; //打开
+                            AdvPacket_2[21] = 15; //打开
+                          //CurrentGroup_1[0] = Group_Two;
+                          //AdvPacket_2[15] = CurrentGroup_1[0];
+                          //AdvPacket_2[19] = BLE_CMD_onoff;  //on/off cmd
+                          //AdvPacket_2[20] = CMD_turn_on; //打开
+                          goto exit_2;
+                          break;  
+                               
+                                  
+                        case HAL_KEY_POWER_ON3:    // 关1      学习   ->  暖光
+                            AdvPacket_2[15] = CurrentGroup_1[0];
+                            AdvPacket_2[19] = cmd_setcw_mode; //on/off cmd
+                            AdvPacket_2[20] = 0; //打开
+                            AdvPacket_2[21] = 255; //打开
+                                      goto exit_2;
+                          break;
+                        //case HAL_KEY_POWER_OFF2:
+                         case HAL_KEY_POWER_OFF3:  // 关2      工作   ->  白光
+                                      AdvPacket_2[15] = CurrentGroup_1[0];
+                            AdvPacket_2[19] = cmd_setcw_mode; //on/off cmd
+                            AdvPacket_2[20] = 255; //打开
+                            AdvPacket_2[21] = 0; //打开
+                                      goto exit_2;
+                          break;  
+                
+                                  case HAL_KEY_BRIGHT_UP:
+                                  case HAL_KEY_BRIGHT_DOWN:
+                          AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                          if(newKey==HAL_KEY_BRIGHT_UP)
+                            AdvPacket_2[19] = cmd_light_inc_set;  //亮度
+                          else if(newKey==HAL_KEY_BRIGHT_DOWN)
+                            AdvPacket_2[19] = cmd_light_dec_set;  //亮度
+                          goto exit_0;
+                          break;
+                                  case HAL_KEY_TEMP_DOWN:
+                                  case HAL_KEY_TEMP_UP:
+                          AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                          if(newKey==HAL_KEY_TEMP_UP)
+                            AdvPacket_2[19] = cmd_temp_inc_set; //色温
+                          else if(newKey==HAL_KEY_TEMP_DOWN)
+                            AdvPacket_2[19] = cmd_temp_dec_set; //色温
+              
+                          AdvPacket_2[20] = 0x00;
+                        exit_0:
+                          fen_Duan = 0;
+                          rgb_static_dynamic = 0;
+                        //exit_1:
+                          AdvPacket_2[21] = 0x00;
+                                  exit_2:
+                          short_long_touch_flag = 1;
+                          AdvPacket_2[22] = 0x00;
+                          SequenceNum_inc_1 = 0;
+                                      break;
+                        default:
+                          {
+                                      KeyMode = 0 ;
+                                      newKey = 0 ;
+                          break;
+                          }
+                      }     
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 16  
+
+                    }
+                    else if(KeyCount > LONG_CNT){   //长按的释放
+                      KeyMode = KEY_PUSH_UP;  //释放按键
+                      newKey  = Key_TBL[KeyCode];
+                      long_key_value_tempp = 0;  //长按只要释放了，就算重新按键
+                      SequenceNum_1++;
+                      switch(newKey)
+                      {
+                                  case HAL_KEY_BRIGHT_UP:
+                                  case HAL_KEY_BRIGHT_DOWN:
+                                  case HAL_KEY_TEMP_DOWN:
+                                  case HAL_KEY_TEMP_UP:
+                          short_long_touch_flag = 3;
+                          long_key_value_temp = 0;
+                          AdvPacket_2[15] = CurrentGroup_1[0];      //组号  off时，不切换组，只对当前操作发组号
+                          AdvPacket_2[19] = cmd_light_temp_change_stop; //停止变化
+                          AdvPacket_2[21] = 0x00;
+                          AdvPacket_2[22] = 0x00;
+                          SequenceNum_inc_1 = 0;
+                          break;
+                      }
+                    }
+                  }
+                  KeyCode = inKey;
+                  KeyCount = 0;
+                  longCount_scale = 0;
+                      wIdleTime = 0;
+                      KeyCode1 = 0;
+                }
+                else if(KeyCode)
+                {
+                  if(KeyCount < 10000){ 
+                    KeyCount++; 
+                  }else{
+                    KeyCount = LONG_CNT+1;
+                  }
+                    
+                      if(KeyCount == SHORT_CNT){
+                          Open_FuncLED();
+                      }
+              
+                      if(KeyCount >= LONG_CNT_ADD){
+                          KeyCount = LONG_CNT+1; 
+                          KeyMode = KEY_PUSH_LONG;
+                    newKey = Key_TBL[KeyCode];
+                           switch(newKey){
+              
+                              case HAL_KEY_BRIGHT_UP:
+                              case HAL_KEY_BRIGHT_DOWN:
+                        AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                        if(newKey==HAL_KEY_BRIGHT_UP)
+                          AdvPacket_2[19] = cmd_light_inc_set;  //亮度长加
+                        else if(newKey==HAL_KEY_BRIGHT_DOWN)
+                          AdvPacket_2[19] = cmd_light_dec_set;  //亮度长减
+                        AdvPacket_2[20] = 0x00;
+                        short_long_touch_flag = 2;
+                        AdvPacket_2[21] = 0x00;
+                        AdvPacket_2[22] = 0x00; 
+                        break;
+                                  
+                              case HAL_KEY_TEMP_DOWN:
+                              case HAL_KEY_TEMP_UP:
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 17  
+
+                          AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                          if(newKey==HAL_KEY_TEMP_UP)
+                            AdvPacket_2[19] = cmd_temp_inc_set; //色温长增
+                          else if(newKey==HAL_KEY_TEMP_DOWN)
+                            AdvPacket_2[19] = cmd_temp_dec_set; //色温长减
+                          AdvPacket_2[20] = 0x00;
+                          short_long_touch_flag = 2;
+                          AdvPacket_2[21] = 0x00;
+                          AdvPacket_2[22] = 0x00;
+                                  break;
+                              
+                              default:  
+                        newKey  = HAL_KEY_NO_KEY;
+                                  KeyMode = 0;
+                      break;   
+                           }
+                          
+                      }
+              
+                  
+                  if(KeyCount == LONG_CNT)  // long key
+                  {
+                    longCount_scale++;
+                    if(longCount_scale>=Long_CNT_SCALE){
+                      longCount_scale = 0;
+                    }
+                    KeyMode = KEY_PUSH_LONG;
+                    newKey = Key_TBL[KeyCode];
+                    {
+                          switch(newKey)
+                    {
+                              case HAL_KEY_POWER_ON1:
+                        
+                          CurrentGroup_1[0] =  Group_One;
+              
+                          AdvPacket_2[15] = Group_ALL;//组号  off时，不切换组，只对当前操作发组号   
+                          AdvPacket_2[19] = cmd_team_set; //组设置命令
+                          AdvPacket_2[20] = CurrentGroup_1[0];
+                          short_long_touch_flag = 2;
+                            AdvPacket_2[21] = 0x00;
+                            AdvPacket_2[22] = 0x00;           
+                            break;
+                                      
+                              case HAL_KEY_BRIGHT_UP:
+                              case HAL_KEY_BRIGHT_DOWN:
+                        AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                        if(newKey==HAL_KEY_BRIGHT_UP)
+                          AdvPacket_2[19] = cmd_light_inc_set;  //亮度长加
+                        else if(newKey==HAL_KEY_BRIGHT_DOWN)
+                          AdvPacket_2[19] = cmd_light_dec_set;  //亮度长减
+                        AdvPacket_2[20] = 0x00;
+                        short_long_touch_flag = 2;
+                        AdvPacket_2[21] = 0x00;
+                        AdvPacket_2[22] = 0x00;         
+                        break;
+                              case HAL_KEY_TEMP_DOWN:
+                              case HAL_KEY_TEMP_UP:
+                        AdvPacket_2[15] = CurrentGroup_1[0];//组号  off时，不切换组，只对当前操作发组号
+                        if(newKey==HAL_KEY_TEMP_UP)
+                          AdvPacket_2[19] = cmd_temp_inc_set; //色温长增
+                        else if(newKey==HAL_KEY_TEMP_DOWN)
+                          AdvPacket_2[19] = cmd_temp_dec_set; //色温长减
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 18  
+
+                        AdvPacket_2[20] = 0x00;
+              
+                        short_long_touch_flag = 2;
+                        AdvPacket_2[21] = 0x00;
+                        AdvPacket_2[22] = 0x00; 
+                                  break;
+                              case HAL_KEY_POWER_ON:
+                        CurrentGroup_1[0] =  Group_ALL;
+                        AdvPacket_2[15] = Group_ALL;//组号  off时，不切换组，只对当前操作发组号
+                        AdvPacket_2[19] = cmd_team_set; //组设置命令
+                        AdvPacket_2[20] = Group_ALL;
+                        short_long_touch_flag = 2;
+                        AdvPacket_2[21] = 0x00;
+                        AdvPacket_2[22] = 0x00; 
+                                  break;
+                      case HAL_KEY_POWER_OFF:
+                        AdvPacket_2[15] = Group_ALL;//组号  off时，不切换组，只对当前操作发组号
+                        AdvPacket_2[19] = cmd_dissolve_set; //组设置命令
+                        AdvPacket_2[20] = Group_ALL;
+                        short_long_touch_flag = 2;
+                        AdvPacket_2[21] = 0x00;
+                        AdvPacket_2[22] = 0x00;           
+                          break;
+                      default:  
+                        newKey  = HAL_KEY_NO_KEY;
+                                  KeyMode = 0;
+                      break;
+                    } 
+                    }
+                  }   
+                } 
+              
+                if((newKey != HAL_KEY_NO_KEY)&&(short_long_touch_flag!=0))
+                {
+                  Set_Common_Tx_Data(); //设置一些公用的Tx数据
+                      adv_flag = 1 ;
+                      adv_flag_count = 0;
+                  tx_data_seted = 1;
+                  rf_encode_37 = 0;
+                  rf_encode_38 = 0;
+                  rf_encode_39 = 0;
+                  rf_encode_state = 0;
+                }
+              }
+              #endif
+1081          
+1082          void TX_CMD_USE_BLE_mode(void)
+1083          {  //使用BLE方式发码
+1084   1        //三个通道约3ms
+1085   1        /* 在BLE三个广播信道中发送BLE Packet */
+1086   1        ++adv_flag_count;
+1087   1        if( adv_flag_count > Tx_Resend_Times){  //发15次
+1088   2          long_key_value_tempp = long_key_value_temp;//用于判断本次的长按与上一次的长按键是否一致。
+1089   2          long_key_value_temp = 0;
+1090   2          adv_flag = 0;
+1091   2          adv_flag_count = 0;
+1092   2        }
+1093   1        
+1094   1        RF_TxLen_CH3789 = 32;
+1095   1        //三个通道发一次的时间约2ms,每4ms发一个轮回，则不会有冲突
+1096   1        //一个通道发一次的时间约800us
+1097   1        if(rf_encode_37  == 1){
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 19  
+
+1098   2          memcpy(&Payload_demo[0],&RF_TxBuf_CH37[0],RF_TxLen_CH3789);
+1099   2          RF_Set_Chn(2);
+1100   2          RF_TXNoAck(Payload_demo, RF_TxLen_CH3789);
+1101   2          while(RF_TxFlag==0);
+1102   2          RF_TxFlag=0;
+1103   2        }
+1104   1        if(rf_encode_38  == 1){ 
+1105   2          memcpy(&Payload_demo[0],&RF_TxBuf_CH38[0],RF_TxLen_CH3789);
+1106   2          RF_Set_Chn(26);
+1107   2          RF_TXNoAck(Payload_demo, RF_TxLen_CH3789);
+1108   2          while(RF_TxFlag==0);
+1109   2          RF_TxFlag=0;
+1110   2        }
+1111   1        if(rf_encode_39  == 1){
+1112   2          memcpy(&Payload_demo[0],&RF_TxBuf_CH39[0],RF_TxLen_CH3789);
+1113   2          RF_Set_Chn(80);
+1114   2          RF_TXNoAck(Payload_demo, RF_TxLen_CH3789);
+1115   2          while(RF_TxFlag==0);
+1116   2          RF_TxFlag=0;
+1117   2        }
+1118   1      }
+1119          
+1120          void Get_MacAddr(void){   //从IC的寄存器中获取 mac地址
+1121   1         // SrcAddr_1[4] = ID4;
+1122   1        SrcAddr_1[3] = ID3;
+1123   1        SrcAddr_1[2] = ID2;
+1124   1          SrcAddr_1[1] = ID1;
+1125   1        SrcAddr_1[0] = ID0;
+1126   1      }
+1127          
+1128          void Set_MacAddr(void){
+1129   1          AdvPacket_2[2] = SrcAddr_1[0];
+1130   1          AdvPacket_2[3] = SrcAddr_1[1];
+1131   1          AdvPacket_2[4] = SrcAddr_1[2];
+1132   1          AdvPacket_2[5] = SrcAddr_1[3];
+1133   1          AdvPacket_2[6] = 0;//SrcAddr_1[4];  //原来BLE包需要的数据
+1134   1      
+1135   1          AdvPacket_2[16] = SrcAddr_1[0];  //ID的LSB ，1586从数据包抓取的mac地址
+1136   1          AdvPacket_2[17] = SrcAddr_1[1];
+1137   1          AdvPacket_2[18] = SrcAddr_1[2];
+1138   1      }
+1139          void Power_On_Init(void){
+1140   1          uint8 i = 10;
+1141   1        EA = 0;
+1142   1        InitSysTimer();
+1143   1        Sys_set_1MHZ_rate();
+1144   1        EA = 1;
+1145   1      
+1146   1      #if UART_ENABLE
+1147   1          UartConfig(BAUD);
+1148   1          WaitUs(60000);  
+1149   1      #endif
+1150   1      
+1151   1          BlePacketDeductive( RF_TxBuf_CH37, AdvPacket_2, 29, 37);
+1152   1      #if UART_ENABLE
+1153   1          uart_data_send[0] = '2';
+1154   1          uart_data_send[1] = '4';
+1155   1          uart_data_send[2] = '6';
+1156   1          uart_data_send[3] = '1';
+1157   1          uart_data_send[4] = 'i';
+1158   1          uart_data_send[5] = 'n';
+1159   1          uart_data_send[6] = 'i';
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 20  
+
+1160   1          uart_data_send[7] = 't';
+1161   1          uart_data_send[8] = '\n';
+1162   1          uart_data_send[9] = '\r';
+1163   1          driver_uart_send_start(9);
+1164   1          WaitUs(60000); 
+1165   1      #if 0    
+                while(i){ //
+                   // driver_uart_send_start(9);
+                     //  WaitUs(60000); 
+                     
+                  WaitUs(10); 
+                      Key_Scan();
+                }
+              #endif
+1174   1      
+1175   1      #else
+                  PALT1_CLB(BIT(2)); // 除能串口脚  
+              #endif
+1178   1          
+1179   1          Delay_ms(1);
+1180   1          
+1181   1          FuncLED_Init();
+1182   1        CurrentGroup_1[0] = Group_ALL;
+1183   1        Get_MacAddr();
+1184   1        cRemoteIDLETime = 500;
+1185   1        fen_Duan = 0;  //分段
+1186   1        Set_Common_com_Data();  
+1187   1      }
+1188          
+1189          uint8 single_RF_test=0;
+1190          void main(void)  
+1191          {
+1192   1        PALT1_INIT();   //PALT1:(0x87):bit[]7:0]=PWM4_IO_EN,PWM3_IO_EN,PWM2_IO_EN,PWM1_IO_EN,PWM0_IO_EN,UART0_IO,
+             -SPI_IO,IIC_IO
+1193   1        mcu_clk_inital();
+1194   1        gpio_init();
+1195   1          WaitUs(500);
+1196   1        
+1197   1        Power_On_Init();   
+1198   1          
+1199   1        while(1)
+1200   1        {
+1201   2          EX5  = 1;               //RF interrupt
+1202   2          if(u10msFlag)
+1203   2          {
+1204   3                  u10msFlag = 0;
+1205   3                  Key_Scan();
+1206   3                  Sys_SleepModeCheck();
+1207   3          }
+1208   2          if(u2msFlag){ //每4ms执行一次
+1209   3            u2msFlag = 0;
+1210   3            if(adv_flag)
+1211   3              TX_CMD_USE_BLE_mode();  //使用BLE模式发码   
+1212   3          }
+1213   2          if(u20msFlag){
+1214   3            u20msFlag = 0;
+1215   3            if(adv_flag){
+1216   4              Ble_Packet_Encode();
+1217   4            }
+1218   3          }
+1219   2          Sys_PowerDown();
+1220   2          Sys_PowerOn();
+C51 COMPILER V9.60.0.0   MAIN                                                              12/30/2020 12:14:31 PAGE 21  
+
+1221   2          MCU_IDLE();
+1222   2          _nop_();
+1223   2          _nop_();
+1224   2          _nop_();
+1225   2          _nop_();
+1226   2          _nop_();
+1227   2          _nop_();
+1228   2        }
+1229   1      }
+1230          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1946    ----
+   CONSTANT SIZE    =    366    ----
+   XDATA SIZE       =    214       3
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      4    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  3 WARNING(S),  0 ERROR(S)

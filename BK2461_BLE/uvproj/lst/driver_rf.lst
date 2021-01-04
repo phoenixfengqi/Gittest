@@ -1,0 +1,205 @@
+C51 COMPILER V9.60.0.0   DRIVER_RF                                                         12/28/2020 20:25:08 PAGE 1   
+
+
+C51 COMPILER V9.60.0.0, COMPILATION OF MODULE DRIVER_RF
+OBJECT MODULE PLACED IN .\driver_rf.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE ..\src\driver_rf.c LARGE OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRI
+                    -NT(.\lst\driver_rf.lst) TABS(2) OBJECT(.\driver_rf.obj)
+
+line level    source
+
+   1          
+   2          #include "includes.h"
+   3          
+   4          
+   5          unsigned char RF_TxFlag;
+   6          
+   7          uint32 anaRegs[9];
+   8          uint8 fifo_data[20]={0};
+   9          uint8 u_remoto_batter[2]={0};
+  10          
+  11          
+  12          
+  13          void Write_Reg_Ana(uint8 addr, uint32 val)
+  14          {
+  15   1      //    uint8 buf[4];
+  16   1      //    buf[3] = (val>>24) & 0xFF;        // MSB
+  17   1      //    buf[2] = (val>>16) & 0xFF;
+  18   1      //    buf[1] = (val>>8) & 0xFF;
+  19   1      //    buf[0] =  val & 0xFF;             // LSB
+  20   1          anaRegs[addr]=val;
+  21   1          while( !(TRX_SCTRL & 0x80) );
+  22   1          TRX_SDATA_0=_BYTE(0, val);
+  23   1          TRX_SDATA_1=_BYTE(1, val);
+  24   1          TRX_SDATA_2=_BYTE(2, val);
+  25   1          TRX_SDATA_3=_BYTE(3, val);
+  26   1          //memcpy (&TRX_SDATA_0, buf, 4);    // data
+  27   1          TRX_SCTRL = addr;                 // address
+  28   1      }
+  29          
+  30          void PowerUp_Rf(void)
+  31          {
+  32   1          TRX_CONFIG |= 0x02;
+  33   1      }
+  34          
+  35          void PowerDown_Rf(void)
+  36          {
+  37   1          TRX_CONFIG &= 0xFD;
+  38   1      }
+  39          
+  40          #if  0
+              void SwitchToRxMode(void)
+              {
+                  PowerUp_Rf();
+                Delay_ms(1);  
+                  FLUSH_RX;
+                  TRX_CE = 0;
+                  TRX_CONFIG |= 0x01;
+                  TRX_CE = 1;
+              }
+              #endif
+  51          
+  52          void SwitchToTxMode(void)
+  53          {
+  54   1          PowerUp_Rf();
+C51 COMPILER V9.60.0.0   DRIVER_RF                                                         12/28/2020 20:25:08 PAGE 2   
+
+  55   1        Delay_ms(1);
+  56   1          FLUSH_TX;
+  57   1          TRX_CE = 0;
+  58   1          TRX_CONFIG &= 0xFE;
+  59   1          TRX_CE = 1;
+  60   1      }
+  61          void SwitchToTxMode_wait1ms(void)
+  62          {
+  63   1        PowerUp_Rf();
+  64   1          FLUSH_TX;
+  65   1          TRX_CE = 0;
+  66   1          TRX_CONFIG &= 0xFE;
+  67   1          TRX_CE = 1;
+  68   1      }
+  69          
+  70          #if 0
+              void ChangeTxPipe(uint8 pipe)
+              {
+                  uint8 tmp_address[5];
+              
+                  switch(pipe)
+                  {
+                      case 0:
+                          memcpy(&TRX_RX_ADDR_P0_0, P0_Address, 5);
+                          memcpy(&TRX_TX_ADDR_0, P0_Address, 5);
+                          memcpy(&TRX_RX_ADDR_P1_0, P1_Address, 5);
+                          break;
+              
+                      case 1:
+                      case 2:
+                      case 3:
+                      case 4:
+                      case 5:
+                          memcpy(tmp_address, P1_Address, 5);
+              
+                          if(pipe == 2)                              // For P1, need not change LSB
+                              tmp_address[0] = TRX_RX_ADDR_P2;
+                          else if(pipe == 3)
+                              tmp_address[0] = TRX_RX_ADDR_P3;
+                          else if(pipe == 4)
+                              tmp_address[0] = TRX_RX_ADDR_P4;
+                          else if(pipe == 5)
+                              tmp_address[0] = TRX_RX_ADDR_P5;
+              
+                          memcpy(&TRX_RX_ADDR_P0_0, tmp_address, 5);
+                          memcpy(&TRX_TX_ADDR_0, tmp_address, 5);
+                          memcpy(tmp_address, P1_Address, 5);
+                          tmp_address[2] = 0x37;                          // avoid for 2 same address for R1, R2, ... R5
+                          memcpy(&TRX_RX_ADDR_P1_0, tmp_address, 5);
+                          break;
+              
+                      default:
+                          break;
+                  }
+              }
+              
+              void R_RX_PAYLOAD(uint8 *pBuf, uint8 bytes)
+              {
+                  uint8 i;
+              
+                  TRX_CMD = 0x40;                   // command
+                  for(i=0; i<bytes; i++)
+C51 COMPILER V9.60.0.0   DRIVER_RF                                                         12/28/2020 20:25:08 PAGE 3   
+
+                      pBuf[i] = TRX_FIFO;           // data
+                  TRX_CMD = 0x00;                   // end: nop command
+              }
+              void W_TX_PAYLOAD(uint8 *pBuf, uint8 bytes)
+              {
+                  uint8 i;
+              
+                  TRX_CMD = 0x60;
+                  for(i=0; i<bytes; i++)
+                      TRX_FIFO = pBuf[i];
+                  TRX_CMD = 0x00;
+              }
+              #endif
+ 130          void W_TX_PAYLOAD_NOACK(uint8 *pBuf, uint8 bytes)
+ 131          {
+ 132   1          uint8 i;
+ 133   1      
+ 134   1          TRX_CMD = 0x68;
+ 135   1          for(i=0; i<bytes; i++)
+ 136   1              TRX_FIFO = pBuf[i];
+ 137   1          TRX_CMD = 0x00;
+ 138   1      }
+ 139          
+ 140          #if 0
+              void W_ACK_PAYLOAD(uint8 *pBuf, uint8 bytes, uint8 pipe)
+              {
+                  uint8 i;
+              
+                  TRX_CMD = 0x68 + pipe;
+                  for(i=0; i<bytes; i++)
+                      TRX_FIFO = pBuf[i];
+                  TRX_CMD = 0x00;
+              }
+              #endif
+ 151          
+ 152          void RF_TXNoAck(char*buf,uint8 len)
+ 153          {
+ 154   1          SwitchToTxMode_wait1ms();
+ 155   1          FLUSH_TX;
+ 156   1          FLUSH_RX; 
+ 157   1          W_TX_PAYLOAD_NOACK(buf, len);
+ 158   1      }
+ 159          
+ 160          void rf_isr() interrupt 11
+ 161          {
+ 162   1      //extern void Open_FuncLED(void); 
+ 163   1        if(TRX_IRQ_STATUS&B_IRQ_RX_DR)
+ 164   1        {
+ 165   2          //RF接收数据ready
+ 166   2          TRX_IRQ_STATUS |= B_IRQ_RX_DR;
+ 167   2          // R_RX_PAYLOAD(fifo_data, TRX_RX_RPL_WIDTH);   
+ 168   2      //    flag_receive_value=1;
+ 169   2        }
+ 170   1        if(TRX_IRQ_STATUS&B_IRQ_TX_DS){
+ 171   2          RF_TxFlag=1;//RF数据已经发送
+ 172   2          TRX_IRQ_STATUS |= B_IRQ_TX_DS;
+ 173   2        }
+ 174   1         AIF &= 0xf7 ; 
+ 175   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.60.0.0   DRIVER_RF                                                         12/28/2020 20:25:08 PAGE 4   
+
+   CODE SIZE        =    326    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     59       8
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1216,7 +1216,7 @@ void main(void)
 				Ble_Packet_Encode();
 			}
 		}
-		//Sys_PowerDown();
+		//Sys_PowerDown(); //git revertºó °´¼üÉ¨ÂëÓ°Ïì
 		Sys_PowerOn();
 		MCU_IDLE();
 		_nop_();
